@@ -14,6 +14,11 @@ Item {
   property string username: "Nikshay1"
   property real positionX: -1
   property real positionY: -1
+  property bool refreshPending: false
+  readonly property string todayKey: Qt.formatDate(clock.date, "yyyy-MM-dd")
+  readonly property var today: calendar.days.find(function(day) { return day.date === root.todayKey })
+  readonly property string refreshLabel: calendar.fetched
+    ? "Updated " + Qt.formatTime(new Date(calendar.fetched), "HH:mm") : "Loading…"
   readonly property int cell: 10
   readonly property int gap: 3
   readonly property int weekCount: Math.ceil((calendar.days.length + firstWeekday) / 7)
@@ -27,7 +32,8 @@ Item {
   }
 
   function refresh() {
-    if (!fetch.running) fetch.running = true
+    if (fetch.running) refreshPending = true
+    else fetch.running = true
   }
 
   function applyState(raw) {
@@ -51,10 +57,16 @@ Item {
   }
 
   onUsernameChanged: refresh()
+  onTodayKeyChanged: refresh()
   Component.onCompleted: refresh()
 
+  SystemClock {
+    id: clock
+    precision: SystemClock.Minutes
+  }
+
   Timer {
-    interval: 30 * 60 * 1000
+    interval: 5 * 60 * 1000
     running: true
     repeat: true
     onTriggered: root.refresh()
@@ -73,6 +85,12 @@ Item {
   Process {
     id: fetch
     command: ["python3", Qt.resolvedUrl("fetch.py").toString().replace("file://", ""), root.username]
+    onExited: {
+      if (root.refreshPending) {
+        root.refreshPending = false
+        Qt.callLater(root.refresh)
+      }
+    }
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -80,7 +98,7 @@ Item {
           var result = JSON.parse(String(text || ""))
           if (result.error) root.error = result.error
           else if (result.days && result.days.length > 350) {
-            if (result.username !== root.username) { root.refresh(); return }
+            if (result.username !== root.username) { root.refreshPending = true; return }
             root.calendar = result
             root.error = ""
           }
@@ -180,12 +198,14 @@ Item {
 
           MouseArea {
             anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.OpenHandCursor
             property real startX: 0
             property real startY: 0
             property real startPointerX: 0
             property real startPointerY: 0
             onPressed: function(mouse) {
+              if (mouse.button === Qt.RightButton) { root.refresh(); return }
               var point = mapToItem(null, mouse.x, mouse.y)
               startPointerX = point.x
               startPointerY = point.y
@@ -199,17 +219,17 @@ Item {
               root.positionX = Math.max(0, Math.min(startX + point.x - startPointerX, popup.width - card.width))
               root.positionY = Math.max(0, Math.min(startY + point.y - startPointerY, popup.height - card.height))
             }
-            onReleased: {
+            onReleased: function(mouse) {
               cursorShape = Qt.OpenHandCursor
-              root.savePosition()
+              if (mouse.button === Qt.LeftButton) root.savePosition()
             }
           }
 
         }
 
         Text {
-          visible: !calendar.days.length || error !== ""
-          text: error || "Loading contribution calendar…"
+          visible: !calendar.days.length || error !== "" || !!calendar.notice
+          text: error || calendar.notice || "Loading contribution calendar…"
           color: root.foreground
           opacity: 0.75
           font.family: root.fontFamily
@@ -279,7 +299,9 @@ Item {
           spacing: Style.space(6)
           Text {
             width: Style.space(430)
-            text: root.hoveredIndex >= 0 ? root.dateLabel(root.dateAt(root.hoveredIndex)) : "Hover a square for its daily count"
+            text: root.hoveredIndex >= 0 ? root.dateLabel(root.dateAt(root.hoveredIndex))
+              : (root.today ? root.today.count + " today · " : "") + root.refreshLabel + " · Right-click to refresh"
+            elide: Text.ElideRight
             color: root.foreground
             opacity: 0.7
             font.family: root.fontFamily

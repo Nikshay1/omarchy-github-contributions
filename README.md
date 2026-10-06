@@ -25,13 +25,18 @@ Drag the heading to place the calendar on your screen. The widget saves its loca
 }
 ```
 
-The widget refreshes every 30 minutes and when the shell starts. It reads GitHub's public contribution calendar with `curl` and Python 3, without a personal access token or extra Python packages. Private contributions follow the visibility settings of the public GitHub profile. On a network failure, the last successful calendar remains visible with an error message.
+The widget refreshes every five minutes and when the shell starts. Right-click the heading to refresh immediately; the footer shows today's count and the last update time.
+
+When the GitHub CLI (`gh`) is installed and signed in, the widget reads GitHub's GraphQL contribution calendar, preserving GitHub's dates and counts. Your credentials stay managed by `gh`. Run `gh auth login` if you need to sign in.
+
+Without an authenticated GitHub CLI, it falls back to the public HTML calendar using `curl`. That calendar can lag behind your profile and stop at GitHub's server date. A notice identifies the public fallback and its last date. The plugin requires Python 3 and no extra Python packages. On a network failure, the last successful calendar remains visible with an error message.
 
 ## Development
 
 ```bash
 omarchy plugin validate .
 python3 fetch.py Nikshay1
+python3 -B -m unittest test_fetch
 ```
 
 ## License

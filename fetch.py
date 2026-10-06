@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Read GitHub's public contribution calendar without authentication."""
+"""Read GitHub's contribution calendar, preferring the authenticated API."""
 
 import json
 import re
 import subprocess
 import sys
-from datetime import date
+from datetime import datetime
 from html.parser import HTMLParser
 
 
@@ -23,7 +23,7 @@ class CalendarParser(HTMLParser):
         if tag == "td" and "ContributionCalendar-day" in a.get("class", ""):
             day = a.get("data-date", "")
             level = a.get("data-level", "")
-            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) and level in "01234":
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) and level in {"0", "1", "2", "3", "4"}:
                 self.days[day] = {"date": day, "level": int(level), "count": 0}
                 self.counts[a.get("id", "")] = day
         elif tag == "tool-tip":
@@ -58,19 +58,66 @@ def parse_calendar(html):
     return {"total": int(total_match.group(1).replace(",", "")), "days": days}
 
 
+QUERY = """query($username: String!) {
+  user(login: $username) {
+    contributionsCollection {
+      contributionCalendar {
+        totalContributions
+        weeks {
+          contributionDays { date contributionCount contributionLevel }
+        }
+      }
+    }
+  }
+}"""
+
+
+def parse_graphql(raw):
+    try:
+        calendar = json.loads(raw)["data"]["user"]["contributionsCollection"]["contributionCalendar"]
+        levels = {"NONE": 0, "FIRST_QUARTILE": 1, "SECOND_QUARTILE": 2,
+                  "THIRD_QUARTILE": 3, "FOURTH_QUARTILE": 4}
+        days = sorted([
+            {"date": day["date"], "count": day["contributionCount"],
+             "level": levels[day["contributionLevel"]]}
+            for week in calendar["weeks"] for day in week["contributionDays"]
+        ], key=lambda day: day["date"])
+        total = calendar["totalContributions"]
+        if len(days) < 350 or sum(day["count"] for day in days) != total:
+            raise ValueError("GitHub returned an incomplete contribution calendar")
+        return {"total": total, "days": days, "source": "github-api"}
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Could not read GitHub's API calendar") from exc
+
+
+def fetch_calendar(username):
+    try:
+        response = subprocess.run(
+            ["gh", "api", "graphql", "-f", f"query={QUERY}", "-f", f"username={username}"],
+            check=True, capture_output=True, text=True, timeout=25,
+        )
+        return parse_graphql(response.stdout)
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
+        # Public HTML remains available on machines without an authenticated gh.
+        response = subprocess.run(
+            ["curl", "-fsSL", "--max-time", "15", "--retry", "2",
+             "--user-agent", "omarchy-github-contributions/2.1",
+             f"https://github.com/users/{username}/contributions"],
+            check=True, capture_output=True, text=True, timeout=60,
+        )
+        result = parse_calendar(response.stdout)
+        result["source"] = "public-calendar"
+        result["notice"] = "Public calendar through " + result["days"][-1]["date"] + "; sign in with gh for your full current activity"
+        return result
+
+
 def main():
     username = sys.argv[1] if len(sys.argv) > 1 else ""
     if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?", username):
         raise ValueError("Set a valid GitHub username in the widget settings")
-    response = subprocess.run(
-        ["curl", "-fsSL", "--max-time", "15", "--retry", "2",
-         "--user-agent", "omarchy-github-contributions/1.0",
-         f"https://github.com/users/{username}/contributions"],
-        check=True, capture_output=True, text=True,
-    )
-    result = parse_calendar(response.stdout)
+    result = fetch_calendar(username)
     result["username"] = username
-    result["fetched"] = date.today().isoformat()
+    result["fetched"] = datetime.now().astimezone().isoformat(timespec="seconds")
     print(json.dumps(result, separators=(",", ":")))
 
 

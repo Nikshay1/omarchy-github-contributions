@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.nikshay1.contributions",
   "name": "GitHub Contributions Desktop Widget",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "Nikshay",
   "description": "A persistent, draggable GitHub contribution calendar for Omarchy",
   "kinds": ["service"],
