@@ -1,51 +1,94 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 
-Panel {
+Item {
   id: root
-  moduleName: "io.github.nikshay1.contributions"
-  manageIpc: false
-
-  property var anchorItem: null
-  property var hostWidget: null
+  property var shell: null
   property var calendar: ({ days: [], total: 0 })
   property string error: ""
   property int hoveredIndex: -1
-  readonly property var barIdentity: hostWidget || root
+  property string username: "Nikshay1"
+  property real positionX: -1
+  property real positionY: -1
   readonly property int cell: 10
   readonly property int gap: 3
   readonly property int weekCount: Math.ceil((calendar.days.length + firstWeekday) / 7)
   readonly property int firstWeekday: calendar.days.length
     ? new Date(calendar.days[0].date + "T12:00:00").getDay() : 0
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
-  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  property real positionX: Number(setting("popupX", -1))
-  property real positionY: Number(setting("popupY", -1))
+  readonly property color foreground: Color.foreground
+  readonly property string fontFamily: Style.font.family
 
-  function open() {
-    if (bar) bar.requestPopout(barIdentity)
-    root.controller.show()
-    if (hostWidget) hostWidget.refresh()
+  function colorForLevel(level) {
+    return ["#161b22", "#0e4429", "#006d32", "#26a641", "#39d353"][Math.max(0, Math.min(4, level || 0))]
   }
 
-  function close() {
-    root.controller.hide()
-    if (bar) bar.releasePopout(barIdentity)
+  function refresh() {
+    if (!fetch.running) fetch.running = true
   }
-  function toggle() { opened ? close() : open() }
+
+  function applyState(raw) {
+    try {
+      var state = JSON.parse(raw)
+      if (typeof state.username === "string" && state.username.trim())
+        username = state.username.trim()
+      if (state.x !== undefined && isFinite(Number(state.x)) && Number(state.x) >= 0)
+        positionX = Number(state.x)
+      if (state.y !== undefined && isFinite(Number(state.y)) && Number(state.y) >= 0)
+        positionY = Number(state.y)
+    } catch (e) { /* No saved position yet. */ }
+  }
 
   function savePosition() {
-    var entry = { id: moduleName }
-    for (var key in settings) if (key !== "id") entry[key] = settings[key]
-    entry.popupX = Math.round(positionX)
-    entry.popupY = Math.round(positionY)
-    settings = entry
-    if (hostWidget) hostWidget.settings = entry
-    if (bar && bar.shell && typeof bar.shell.updateEntryInline === "function")
-      bar.shell.updateEntryInline(moduleName, entry)
+    stateFile.setText(JSON.stringify({
+      username: username,
+      x: Math.round(positionX),
+      y: Math.round(positionY)
+    }, null, 2) + "\n")
+  }
+
+  onUsernameChanged: refresh()
+  Component.onCompleted: refresh()
+
+  Timer {
+    interval: 30 * 60 * 1000
+    running: true
+    repeat: true
+    onTriggered: root.refresh()
+  }
+
+  FileView {
+    id: stateFile
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/github-contributions.json"
+    watchChanges: true
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.applyState(text())
+    onFileChanged: reload()
+  }
+
+  Process {
+    id: fetch
+    command: ["python3", Qt.resolvedUrl("fetch.py").toString().replace("file://", ""), root.username]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var result = JSON.parse(String(text || ""))
+          if (result.error) root.error = result.error
+          else if (result.days && result.days.length > 350) {
+            if (result.username !== root.username) { root.refresh(); return }
+            root.calendar = result
+            root.error = ""
+          }
+        } catch (e) {
+          root.error = "Could not read GitHub contributions"
+        }
+      }
+    }
   }
 
   function dateAt(index) {
@@ -72,28 +115,25 @@ Panel {
 
   PanelWindow {
     id: popup
-    screen: root.anchorItem && root.anchorItem.QsWindow.window
-      ? root.anchorItem.QsWindow.window.screen : null
-    visible: root.opened
+    screen: Quickshell.screens.length ? Quickshell.screens[0] : null
+    visible: true
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     anchors { top: true; bottom: true; left: true; right: true }
     WlrLayershell.namespace: "omarchy-github-contributions"
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     mask: Region { item: card }
 
     BorderSurface {
       id: card
-      width: Math.min(Style.space(760), popup.width - Style.gapsOut * 2)
-      height: Math.min(content.implicitHeight + contentTopInset + contentBottomInset,
-                       popup.height - Style.gapsOut * 2)
+      width: Math.max(120, Math.min(Style.space(760), popup.width - Style.gapsOut * 2))
+      height: Math.max(80, Math.min(content.implicitHeight + contentTopInset + contentBottomInset,
+                                   popup.height - Style.gapsOut * 2))
       x: root.positionX >= 0 ? Math.max(0, Math.min(root.positionX, popup.width - width))
         : Math.round((popup.width - width) / 2)
       y: root.positionY >= 0 ? Math.max(0, Math.min(root.positionY, popup.height - height))
-        : (root.bar && root.bar.position === "bottom"
-          ? popup.height - height - root.bar.barSize - Style.gapsOut
-          : root.bar ? root.bar.barSize + Style.gapsOut : Style.gapsOut)
+        : Style.space(40)
       color: Color.popups.background
       borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
       padding: Style.spacing.popupPadding
@@ -129,7 +169,7 @@ Panel {
               font.bold: true
             }
             Text {
-              text: "@" + String(root.setting("username", "Nikshay1"))
+              text: "@" + root.username
               color: root.foreground
               opacity: 0.6
               font.family: root.fontFamily
@@ -140,7 +180,6 @@ Panel {
 
           MouseArea {
             anchors.fill: parent
-            anchors.rightMargin: Style.space(28)
             cursorShape: Qt.OpenHandCursor
             property real startX: 0
             property real startY: 0
@@ -166,19 +205,6 @@ Panel {
             }
           }
 
-          Text {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            text: "×"
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: 18
-            MouseArea {
-              anchors.fill: parent
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.close()
-            }
-          }
         }
 
         Text {
@@ -235,7 +261,7 @@ Panel {
               height: root.cell
               radius: 2
               visible: !!day
-              color: root.hostWidget ? root.hostWidget.colorForLevel(day ? day.level : 0) : "#161b22"
+              color: root.colorForLevel(day ? day.level : 0)
               border.width: root.hoveredIndex === index ? 1 : 0
               border.color: root.foreground
 
@@ -273,7 +299,7 @@ Panel {
               width: root.cell
               height: root.cell
               radius: 2
-              color: root.hostWidget ? root.hostWidget.colorForLevel(index) : "#161b22"
+              color: root.colorForLevel(index)
               anchors.verticalCenter: parent.verticalCenter
             }
           }

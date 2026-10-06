@@ -1,6 +1,6 @@
 # Omarchy GitHub Contributions
 
-A native Omarchy 4 bar widget for your GitHub contribution calendar. The bar shows the latest seven days as green squares. Click it for the full year grid, contribution total, daily counts on hover, and the GitHub intensity legend.
+A persistent GitHub contribution calendar for the Omarchy 4 desktop. It stays visible while the plugin is enabled, can be dragged by its heading, and remembers its position. The grid shows a year of activity, the contribution total, and each day's count on hover.
 
 ## Install
 
@@ -8,24 +8,24 @@ A native Omarchy 4 bar widget for your GitHub contribution calendar. The bar sho
 omarchy plugin add https://github.com/Nikshay1/omarchy-github-contributions.git --enable --yes
 ```
 
-The plugin defaults to `Nikshay1` and appears on the right side of the bar. To show a different public GitHub profile, set `username` on its entry in `~/.config/omarchy/shell.json`:
+This is a desktop widget. It does not add an item to the Omarchy bar. Enable or disable it with:
 
-```json
-{ "id": "io.github.nikshay1.contributions", "username": "your-github-name" }
+```bash
+omarchy plugin enable io.github.nikshay1.contributions
+omarchy plugin disable io.github.nikshay1.contributions
 ```
 
-The entry belongs in `bar.layout.right` (or another bar section). The Omarchy shell reloads the config when saved.
+Drag the heading to place the calendar on your screen. The widget saves its location in `~/.local/state/omarchy/github-contributions.json` and restores it after a shell restart. That file also contains the `username` setting, which defaults to `Nikshay1`:
 
-## Use
+```json
+{
+  "username": "your-github-name",
+  "x": 500,
+  "y": 40
+}
+```
 
-- **Left click:** Open or close the calendar.
-- **Middle click:** Refresh immediately.
-- **Drag the calendar heading:** Move the full calendar anywhere on the screen. Its position is saved.
-- **Click ×:** Close the floating calendar.
-- **Hover a square:** Show its date and contribution count.
-- **Automatic refresh:** Every 30 minutes, and when the popup opens.
-
-The plugin reads GitHub's public contribution calendar with `curl` and Python 3. It requires no token or extra Python packages. It shows the activity visible on a public GitHub profile, so private contributions follow that profile's visibility settings. If the network is unavailable, the last successful calendar stays visible and the popup shows an error.
+The widget refreshes every 30 minutes and when the shell starts. It reads GitHub's public contribution calendar with `curl` and Python 3, without a personal access token or extra Python packages. Private contributions follow the visibility settings of the public GitHub profile. On a network failure, the last successful calendar remains visible with an error message.
 
 ## Development
 
@@ -33,8 +33,6 @@ The plugin reads GitHub's public contribution calendar with `curl` and Python 3.
 omarchy plugin validate .
 python3 fetch.py Nikshay1
 ```
-
-The source is an Omarchy Quickshell plugin: `manifest.json`, `BarWidget.qml`, `Panel.qml`, and `fetch.py`.
 
 ## License
 
