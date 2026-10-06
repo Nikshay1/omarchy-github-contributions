@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.nikshay1.contributions",
+  "name": "GitHub Contributions",
+  "version": "1.0.0",
+  "author": "Nikshay",
+  "description": "GitHub contribution heatmap in the Omarchy bar",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "GitHub Contributions",
+    "description": "Recent activity in the bar and a year-long heatmap on click",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": { "username": "Nikshay1" },
+    "schema": [
+      { "key": "username", "type": "string", "label": "GitHub username" }
+    ]
+  }
+}
