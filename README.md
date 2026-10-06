@@ -20,6 +20,8 @@ The entry belongs in `bar.layout.right` (or another bar section). The Omarchy sh
 
 - **Left click:** Open or close the calendar.
 - **Middle click:** Refresh immediately.
+- **Drag the calendar heading:** Move the full calendar anywhere on the screen. Its position is saved.
+- **Click ×:** Close the floating calendar.
 - **Hover a square:** Show its date and contribution count.
 - **Automatic refresh:** Every 30 minutes, and when the popup opens.
 

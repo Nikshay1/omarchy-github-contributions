@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.nikshay1.contributions",
   "name": "GitHub Contributions",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Nikshay",
   "description": "GitHub contribution heatmap in the Omarchy bar",
   "kinds": ["bar-widget"],

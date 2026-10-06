@@ -1,4 +1,6 @@
 import QtQuick
+import Quickshell
+import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 
@@ -20,14 +22,31 @@ Panel {
     ? new Date(calendar.days[0].date + "T12:00:00").getDay() : 0
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  property real positionX: Number(setting("popupX", -1))
+  property real positionY: Number(setting("popupY", -1))
 
   function open() {
+    if (bar) bar.requestPopout(barIdentity)
     root.controller.show()
     if (hostWidget) hostWidget.refresh()
   }
 
-  function close() { root.controller.hide() }
+  function close() {
+    root.controller.hide()
+    if (bar) bar.releasePopout(barIdentity)
+  }
   function toggle() { opened ? close() : open() }
+
+  function savePosition() {
+    var entry = { id: moduleName }
+    for (var key in settings) if (key !== "id") entry[key] = settings[key]
+    entry.popupX = Math.round(positionX)
+    entry.popupY = Math.round(positionY)
+    settings = entry
+    if (hostWidget) hostWidget.settings = entry
+    if (bar && bar.shell && typeof bar.shell.updateEntryInline === "function")
+      bar.shell.updateEntryInline(moduleName, entry)
+  }
 
   function dateAt(index) {
     return calendar.days[index - firstWeekday]
@@ -51,42 +70,114 @@ Panel {
     return Qt.formatDate(date, "MMM")
   }
 
-  KeyboardPanel {
+  PanelWindow {
     id: popup
-    anchorItem: root.anchorItem
-    owner: root.barIdentity
-    bar: root.bar
-    open: root.opened
-    centerOnBar: true
-    contentWidth: fittedContentWidth(Style.space(760))
-    contentHeight: fittedContentHeight(content.implicitHeight)
+    screen: root.anchorItem && root.anchorItem.QsWindow.window
+      ? root.anchorItem.QsWindow.window.screen : null
+    visible: root.opened
+    color: "transparent"
+    exclusionMode: ExclusionMode.Ignore
+    anchors { top: true; bottom: true; left: true; right: true }
+    WlrLayershell.namespace: "omarchy-github-contributions"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    mask: Region { item: card }
 
-    Flickable {
-      anchors.fill: parent
-      clip: true
-      contentWidth: content.implicitWidth
-      contentHeight: content.implicitHeight
+    BorderSurface {
+      id: card
+      width: Math.min(Style.space(760), popup.width - Style.gapsOut * 2)
+      height: Math.min(content.implicitHeight + contentTopInset + contentBottomInset,
+                       popup.height - Style.gapsOut * 2)
+      x: root.positionX >= 0 ? Math.max(0, Math.min(root.positionX, popup.width - width))
+        : Math.round((popup.width - width) / 2)
+      y: root.positionY >= 0 ? Math.max(0, Math.min(root.positionY, popup.height - height))
+        : (root.bar && root.bar.position === "bottom"
+          ? popup.height - height - root.bar.barSize - Style.gapsOut
+          : root.bar ? root.bar.barSize + Style.gapsOut : Style.gapsOut)
+      color: Color.popups.background
+      borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
+      padding: Style.spacing.popupPadding
+      radius: Style.cornerRadius
+
+      Flickable {
+        anchors.fill: parent
+        anchors.topMargin: card.contentTopInset
+        anchors.rightMargin: card.contentRightInset
+        anchors.bottomMargin: card.contentBottomInset
+        anchors.leftMargin: card.contentLeftInset
+        clip: true
+        contentWidth: content.implicitWidth
+        contentHeight: content.implicitHeight
+        interactive: contentWidth > width || contentHeight > height
 
       Column {
         id: content
         spacing: Style.space(12)
 
-        Row {
-          spacing: Style.space(8)
-          Text {
-            text: calendar.days.length ? calendar.total + " contributions in the last year" : "GitHub contributions"
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: 17
-            font.bold: true
+        Item {
+          width: card.width - card.contentLeftInset - card.contentRightInset
+          height: heading.implicitHeight
+
+          Row {
+            id: heading
+            spacing: Style.space(8)
+            Text {
+              text: calendar.days.length ? calendar.total + " contributions in the last year" : "GitHub contributions"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: 17
+              font.bold: true
+            }
+            Text {
+              text: "@" + String(root.setting("username", "Nikshay1"))
+              color: root.foreground
+              opacity: 0.6
+              font.family: root.fontFamily
+              font.pixelSize: 12
+              anchors.verticalCenter: parent.verticalCenter
+            }
           }
+
+          MouseArea {
+            anchors.fill: parent
+            anchors.rightMargin: Style.space(28)
+            cursorShape: Qt.OpenHandCursor
+            property real startX: 0
+            property real startY: 0
+            property real startPointerX: 0
+            property real startPointerY: 0
+            onPressed: function(mouse) {
+              var point = mapToItem(null, mouse.x, mouse.y)
+              startPointerX = point.x
+              startPointerY = point.y
+              startX = card.x
+              startY = card.y
+              cursorShape = Qt.ClosedHandCursor
+            }
+            onPositionChanged: function(mouse) {
+              if (!(mouse.buttons & Qt.LeftButton)) return
+              var point = mapToItem(null, mouse.x, mouse.y)
+              root.positionX = Math.max(0, Math.min(startX + point.x - startPointerX, popup.width - card.width))
+              root.positionY = Math.max(0, Math.min(startY + point.y - startPointerY, popup.height - card.height))
+            }
+            onReleased: {
+              cursorShape = Qt.OpenHandCursor
+              root.savePosition()
+            }
+          }
+
           Text {
-            text: "@" + String(root.setting("username", "Nikshay1"))
-            color: root.foreground
-            opacity: 0.6
-            font.family: root.fontFamily
-            font.pixelSize: 12
+            anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
+            text: "×"
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: 18
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.close()
+            }
           }
         }
 
@@ -195,6 +286,7 @@ Panel {
           }
         }
       }
+    }
     }
   }
 }
