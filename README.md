@@ -1,6 +1,6 @@
 # Omarchy GitHub Contributions
 
-A persistent GitHub contribution calendar for the Omarchy 4 desktop. It stays visible while the plugin is enabled, can be dragged by its heading, and remembers its position. The grid shows a year of activity, the contribution total, and each day's count on hover.
+A persistent GitHub contribution calendar for the Omarchy 4 desktop. It sits above the wallpaper and behind application windows, can be dragged by its heading when the desktop is exposed, and remembers its position. The grid shows a year of activity, the contribution total, and each day's count on hover.
 
 ## Install
 

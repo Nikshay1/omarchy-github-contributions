@@ -121,7 +121,7 @@ Item {
     exclusionMode: ExclusionMode.Ignore
     anchors { top: true; bottom: true; left: true; right: true }
     WlrLayershell.namespace: "omarchy-github-contributions"
-    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.layer: WlrLayer.Bottom
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     mask: Region { item: card }
 
@@ -135,7 +135,7 @@ Item {
       y: root.positionY >= 0 ? Math.max(0, Math.min(root.positionY, popup.height - height))
         : Style.space(40)
       color: Color.popups.background
-      borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
+      borderSpec: Border.flat("#30363d", 1)
       padding: Style.spacing.popupPadding
       radius: Style.cornerRadius
 
